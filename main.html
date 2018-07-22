@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="author" content="Xinyi Liu">
+    <title>PARK&GO</title>
+    <link href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css" rel="stylesheet" id="bootstrap-css">
+    <link rel="stylesheet" href="https://js.arcgis.com/3.25/esri/css/esri.css">
+    <link rel="stylesheet" href="https://js.arcgis.com/3.25/dojo/resources/dojo.css">
+    <link rel="stylesheet" href="https://js.arcgis.com/3.25/dijit/themes/claro/claro.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/listview.css">
+    <script src="//code.jquery.com/jquery-1.11.1.min.js"></script>
+    <script src="//netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
+    <script src="https://js.arcgis.com/3.25/"></script>
+
+    <script>
+      var map, pointObjs=[], geometries;
+      var routeTask, routeParams;
+      var stopSymbol, routeSymbol, lastStop;
+      var locationDict, map, censusBlockPointsLayer, query, symbolTarget;
+      require(["esri/urlUtils", "esri/map", "esri/symbols/SimpleMarkerSymbol", "esri/symbols/SimpleLineSymbol", "esri/graphic", "esri/Color", "esri/tasks/RouteTask", "esri/tasks/RouteParameters", "esri/tasks/FeatureSet", "dojo/dom", "dojo/on", "dojo/domReady!", "dijit/registry", "dijit/layout/BorderContainer", "dijit/layout/ContentPane", "dijit/form/HorizontalSlider", "dijit/form/HorizontalRuleLabels"],function(urlUtils, Map, SimpleMarkerSymbol, SimpleLineSymbol, Graphic, Color, RouteTask, RouteParameters, FeatureSet,dom, on, registry) {
+
+        document.getElementById("revisit").onclick = function() {
+            routeTask = new RouteTask("https://utility.arcgis.com/usrsvcs/appservices/8MfjZoe3fKDc5jvC/rest/services/World/Route/NAServer/Route_World/solve");
+            //setup the route parameters
+            routeParams = new RouteParameters();
+            routeParams.stops = new FeatureSet();
+            routeParams.outSpatialReference = {
+              "wkid" : 102100
+            };
+
+            routeTask.on("solve-complete", showRoute);
+            routeTask.on("error", errorHandler);
+
+            //define the symbology used to display the route
+            stopSymbol = new SimpleMarkerSymbol().setStyle(SimpleMarkerSymbol.STYLE_CROSS).setSize(15);
+            stopSymbol.outline.setWidth(4);
+            routeSymbol = new SimpleLineSymbol().setColor(new dojo.Color([0, 0, 255, 0.5])).setWidth(5);
+
+            for(i=0; i<pointObjs.length; i++) {
+              if(pointObjs[i].toRevisit) {
+                addStop(pointObjs[i].geometry);
+              }
+            }
+
+            function addStop(geometry) {
+              var stop = map.graphics.add(new Graphic(geometry, stopSymbol));
+              routeParams.stops.features.push(stop);
+
+              if (routeParams.stops.features.length >= 2) {
+                routeTask.solve(routeParams);
+                lastStop = routeParams.stops.features.splice(0, 1)[0];
+              }
+            }
+
+            //Adds the solved route to the map as a graphic
+            function showRoute(evt) {
+              map.graphics.add(evt.result.routeResults[0].route.setSymbol(routeSymbol));
+            }
+
+            //Displays any error returned by the Route Task
+            function errorHandler(err) {
+              alert("An error occured\n" + err.message + "\n" + err.details.join("\n"));
+
+              routeParams.stops.features.splice(0, 0, lastStop);
+              map.graphics.remove(routeParams.stops.features.splice(1, 1)[0]);
+            }
+        }
+        
+      });
+      require(["esri/urlUtils", "esri/map", "esri/layers/FeatureLayer", "esri/toolbars/draw", "esri/tasks/locator", "esri/symbols/PictureMarkerSymbol", "esri/symbols/SimpleMarkerSymbol", "esri/symbols/SimpleFillSymbol", "esri/symbols/SimpleLineSymbol", "esri/config", "esri/dijit/Search", "esri/InfoTemplate", "esri/graphic", "esri/Color", "esri/tasks/RouteTask", "esri/tasks/RouteParameters", "esri/tasks/FeatureSet", "esri/tasks/query", "esri/tasks/QueryTask", "esri/tasks/Geoprocessor", "dojo/dom", "dojo/on", "dojo/dom-style", "dojo/parser", "dojo/_base/array", "dojo/domReady!", "dijit/registry", "dijit/layout/BorderContainer", "dijit/layout/ContentPane", "dijit/form/HorizontalSlider", "dijit/form/HorizontalRuleLabels"], function(urlUtils, Map, FeatureLayer, Draw, Locator, PictureMarkerSymbol, SimpleMarkerSymbol, SimpleFillSymbol, SimpleLineSymbol, esriConfig, Search, InfoTemplate, Graphic, Color, RouteTask, RouteParameters, FeatureSet, Query, QueryTask, Geoprocessor, dom, on, domStyle, parser, array, registry) {
+         map = new Map("map", {
+          basemap: "gray",
+          center: [-118.2468, 34.0407],
+          zoom: 14
+         });
+
+        var markerSymbol = new SimpleMarkerSymbol();
+        markerSymbol.setColor(new Color("#00FFFF"));
+        markerSymbol.setSize(8);
+
+        // markerSymbol.outline.setSize(1);
+        map.on("load", initFunctionality);
+
+        //step 1 - search
+        var search = new Search({
+          map: map,
+        }, "search");
+
+        search.startup();
+
+        //step 3 - get parking address
+        on(search,'search-results', function(locationResponse) {
+
+          var targetLocation = locationResponse;             
+          locationDict = targetLocation["results"][0][0]["feature"]["geometry"];
+          var temp = null;
+          temp = locationDict;
+          plus = document.getElementById("plus");
+          symbolTarget = new SimpleMarkerSymbol();
+          symbolTarget.style = SimpleMarkerSymbol.STYLE_DIAMOND;
+          symbolTarget.setSize(10);
+          symbolTarget.setColor(new Color("red"));
+          map.graphics.add(new Graphic(locationDict, symbolTarget));
+          
+          plus.onclick = function(pointObjs, temp) {
+            pointObj = {
+              //index: 
+              geometry: temp,
+              name: "stop",
+              toRevisit: true
+            };
+            pointObjs.push(pointObj);
+            console.log("temp location dictionary is", temp);
+          }
+        });  
+
+        //step 2 - connect to feature layer to retrieve data
+        censusBlockPointsLayer = new FeatureLayer("https://services8.arcgis.com/LLNIdHmmdjO2qQ5q/ArcGIS/rest/services/parkingftw_XYTableToPoint/FeatureServer/0", {
+         mode: FeatureLayer.MODE_SELECTION,
+         infoTemplate: new InfoTemplate("OBJECTID: ${OBJECTID}", "${*}"),
+         outFields: ["OBJECTID","FEE","HOURS"]}
+         );  
+
+        //define symbols
+        var symbol = new SimpleMarkerSymbol();
+        symbol.style = SimpleMarkerSymbol.STYLE_SQUARE;
+        symbol.setSize(8);
+        symbol.setColor(new Color([255,255,0,0.5]));
+        censusBlockPointsLayer.setSelectionSymbol(symbol);
+
+
+        var markerSymbolParking = new SimpleMarkerSymbol();
+        markerSymbolParking.setPath("M16,4.938c-7.732,0-14,4.701-14,10.5c0,1.981,0.741,3.833,2.016,5.414L2,25.272l5.613-1.44c2.339,1.316,5.237,2.106,8.387,2.106c7.732,0,14-4.701,14-10.5S23.732,4.938,16,4.938zM16.868,21.375h-1.969v-1.889h1.969V21.375zM16.772,18.094h-1.777l-0.176-8.083h2.113L16.772,18.094z");
+        markerSymbolParking.setSize(14);
+        markerSymbolParking.setColor(new Color("#00FFFF"));
+
+        //step 4 - calculate drive time thingy 
+        on(dom.byId("analysisInfo"), "click", function(){
+
+          console.log("Finding parking");
+
+          query = new Query();
+          //GP Service Endpoint
+          var gp = new Geoprocessor("http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Network/ESRI_DriveTime_US/GPServer/CreateDriveTimePolygons");
+
+          censusBlockPointsLayer.clearSelection();
+          map.graphics.clear();
+          map.graphics.add(new Graphic(locationDict, symbolTarget));
+
+          var symbol = new SimpleMarkerSymbol();
+          var graphic = new Graphic(locationDict, symbol);
+
+          var features= [];
+          features.push(graphic);
+          var featureSet = new FeatureSet();
+          featureSet.features = features;
+          var params = { "Input_Location": featureSet, "Drive_Times": 1 };
+          gp.outSpatialReference = map.spatialReference;
+            
+          gp.execute(params);
+          // console.log(gp);
+          // console.log(params); 
+          dom.byId("messages").innerHTML = "<b>Executing GP Task...</b>";
+
+          //step 5 - find intersect 
+          // Listen for GP execute-complete event
+          gp.on("execute-complete", function(evt) {
+            var feature = evt.results[0].value.features[0];
+            var symbol = new SimpleFillSymbol(
+              SimpleFillSymbol.STYLE_NULL,
+              new SimpleLineSymbol(
+                SimpleLineSymbol.STYLE_DASHDOT,
+                new Color([255,0,0]),
+                2
+              ),
+              new Color([255,255,0,0.25])
+            );
+
+            feature.setSymbol(symbol);
+            map.graphics.add(feature);
+
+            query.geometry = feature.geometry;
+            censusBlockPointsLayer.selectFeatures(query, FeatureLayer.SELECTION_NEW);
+            dom.byId("messages").innerHTML = "<b>Selecting Features...</b>";
+          });
+
+          map.addLayer(censusBlockPointsLayer);
+
+          censusBlockPointsLayer.on("selection-complete", function() {
+              var totalPopulation = sumPopulation(censusBlockPointsLayer.getSelectedFeatures());
+              var lowestPoint = findClosest(censusBlockPointsLayer.getSelectedFeatures());
+              var found = "<b>Found the closest point!</b>";
+              dom.byId('messages').innerHTML = found;
+          });
+        });
+
+        function initFunctionality() {
+          console.log("Map ready");
+        }
+
+        function sumPopulation(features) {
+          return features.length;
+        }
+
+        map.on("click", myClickHandler);  
+
+        // var locator = new Locator("http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Locators/ESRI_Geocode_USA/GeocodeServer");
+        // var address = {"Single Line Input": "100 main street"};
+        // var params = {address: address, searchExtent: map.extent};              
+        // locator.outSpatialReference= map.spatialReference;
+        // locator.addressToLocations(params);
+
+       function findClosest(features) {
+          var curIndex = -1;
+          var curLowest = 1000; 
+          var curClosest = 10000000; 
+          // console.log("features", features);
+          for (var x = 0; x < features.length; x++) {
+             var curDistance = esri.geometry.getLength(features[x]['geometry'], locationDict); 
+             if (curLowest > features[x].attributes["FEE"]){
+                curIndex = x; 
+                curLowest = features[x].attributes["FEE"];   
+                curClosest = curDistance;              
+             }               
+             else if (curLowest == features[x].attributes["FEE"]){
+                if(curDistance < curClosest){
+                   curIndex = x; 
+                   curLowest = features[x].attributes["FEE"];   
+                   curClosest = curDistance;              
+                }
+             }
+          }
+          // console.log(curIndex, curLowest, curClosest);
+          map.graphics.add(new Graphic(features[curIndex]['geometry'], markerSymbolParking));
+          // console.log(features[curIndex]['geometry']);
+          return features[curIndex];
+       }
+
+        function myClickHandler(event) {
+          //tb.deactivate(); 
+          map.enableMapNavigation();
+          var name;
+          var location = prompt("Please enter location name:", "home");
+          if (location == null || location == "") {
+            name = "";
+          } else {
+            name = location;
+          }
+          pointObj = {
+            //index: 
+            geometry: event.mapPoint,
+            name: name,
+            toRevisit: true
+          };
+          pointObjs.push(pointObj);
+          //geometries.push(event.geometry)
+          console.log("User clicked at " +
+            event.screenPoint.x + ", " + event.screenPoint.y +
+            " on the screen. The map coordinate at this point is " +
+            event.mapPoint.x + ", " + event.mapPoint.y
+          );
+          map.graphics.add(new Graphic(event.mapPoint, markerSymbol));
+
+          var li = document.createElement("li");
+          if (name!="") {
+            var t = document.createTextNode(name);
+            var x = document.createElement("IMG");
+            x.setAttribute("src", "image/marker.png");
+            li.appendChild(x);
+            li.appendChild(t);
+            document.getElementById("list").appendChild(li);
+          }
+          var span = document.createElement("SPAN");
+          var txt = document.createTextNode("\u00D7");
+          span.className = "close";
+          span.appendChild(txt);
+          li.appendChild(span);
+
+          for (i = 0; i < close.length; i++) {
+            close[i].onclick = function() {
+                var div = this.parentElement;
+                div.style.display = "none";
+                // for (j = 0; j<pointObjs.length; j++) {
+                //     if (pointObjs[j].name==div["innerText" in div? "innerText" : "textContent"])
+                //         pointObjs
+                // }
+            }
+          }
+          // document.getElementById("list").innerHTML += "<li><img src=\"image/marker.png\"><h3>  " + name + "</h3></li>";
+          console.log(event.mapPoint)     
+        }
+
+        // Create a "close" button and append it to each list item
+        var myNodelist = document.getElementsByTagName("LI");
+        var i;
+        for (i = 0; i < myNodelist.length; i++) {
+          var span = document.createElement("SPAN");
+          var txt = document.createTextNode("\u00D7");
+          span.className = "close";
+          span.appendChild(txt);
+          myNodelist[i].appendChild(span);
+        }
+
+        // Click on a close button to hide the current list item
+        var close = document.getElementsByClassName("close");
+        var i;
+        for (i = 0; i < close.length; i++) {
+          close[i].onclick = function() {
+            var div = this.parentElement;
+            div.style.display = "none";
+          }
+        }
+      });
+    </script>
+  </head>
+
+  <body>
+    <div class="container">
+      <!-- Page header -->
+      <div class="page-header">
+        <h2><img src="image/icon.jpg"><img src="image/logo.jpg"><!-- PARK&GO <small>Make your routing smart</small> --></h2>
+      </div>
+      <!-- /Page header -->
+
+      <!-- Timeline -->
+      <div class="timeline">
+        <!-- Panel -->
+        <article class="panel panel-danger panel-outline">
+            <!-- Icon -->
+            <div class="panel-heading icon">
+                <input type="image" src="image/search.png" id="analysisInfo" border="0" alt="Submit"/>
+            </div>
+            <!-- /Icon -->
+            <!-- Body -->
+            <div class="panel-body">
+                <div id="search"></div>
+                <span id="messages"></span>
+                      <select name="priority" > Priority
+                      <option value="price">Price</option>
+                      <option value="distance" selected>Distance</option>
+                      </select>
+            </div>
+            <!-- /Body -->
+        </article>
+
+        <!-- Panel -->
+        <article class="panel panel-default panel-outline">
+            <!-- Icon -->
+            <div class="panel-heading icon">
+                <i class="glyphicon glyphicon-picture"></i>
+            </div>
+            <!-- /Icon -->
+            <!-- Body -->
+            <div id="map" class="panel-body"></div>
+            <!-- /Body -->
+        </article>
+        <!-- /Panel -->
+    
+        <!-- Panel -->
+        <article class="panel panel-primary">
+            <!-- Icon -->
+            <div class="panel-heading icon">
+                <i id="plus" class="glyphicon glyphicon-plus"></i>
+            </div>
+            <!-- /Icon -->
+            <!-- Heading -->
+            <div class="panel-heading">
+                <h2 class="panel-title"><button id="revisit" class="revisit">Revisit</button></h2>
+            </div>
+            <!-- /Heading -->  
+            <!-- Body -->
+            <ul id="list" class="list">
+            </ul>
+            <!-- /Body --> 
+            <!-- Footer -->
+            <div class="panel-footer">
+                <small>Take locations to visit again</small>
+            </div>
+          
+            <!-- /Footer -->
+        </article>
+        <!-- /Panel -->
+
+        <a href="https://survey123.arcgis.com/share/781200a5fcf243bf8f7f31fa4ce7ac0c" target="_blank">Provide Feedback!</a>
+
+    </div>
+    <!-- /Timeline -->
+</div>
+</div>
+</body>

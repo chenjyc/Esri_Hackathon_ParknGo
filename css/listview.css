@@ -1,0 +1,40 @@
+/*.listview {
+  position: absolute;
+  margin: 20px;
+  padding-bottom: 10pm
+}*/
+
+/*.list {
+  list-style-type: none;
+  width: 500px;
+}*/
+
+h3 {
+  font: bold 18px/1.5 Helvetica, Verdana, sans-serif;
+}
+
+li img {
+  float: left;
+  margin: 0 15px 0 0;
+}
+
+li p {
+  font: 200 12px/1.5 Georgia, Times New Roman, serif;
+}
+
+li {
+  padding: 8px;
+  overflow: auto;
+}
+
+/* Set all odd list items to a different color (zebra-stripes) */
+li:nth-child(odd) {
+  background: #f9f9f9;
+}
+
+li:hover {
+  background: #eee;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
